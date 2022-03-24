@@ -80,24 +80,6 @@ Module TestEncoder
         Console.WriteLine($"Match: {resCheck2}")
         Console.ForegroundColor = ConsoleColor.Gray
 
-
-
-        Dim message As String = "gridItem::gridItem( const gridItem& other )"
-
-        Dim encMessage As IEnumerable(Of Boolean) = coder.Encode(message)
-        Console.WriteLine($"Message: {message}".Insert(0, vbNewLine))
-        Dim checkStr As String = "1100010110000010100011010000010101000100111011101011111101000010010001001101001101111111101101010100100001000010010010111001111010001110110101101111111011010110000001011000001010001101000001010100010011101110101111110100001001000100110100110111111110110101010010000100001001001011100111101011001111100001110000000011110100001010111100100111011001011110100000010101111001111010000001011011111110110101101100000011110100000101100000101000110100000101010001001110111010111111010000100100010011010011011111111011010101001000010000100100101110011110100000101000110111000000001111010000011001011110101111111011010110110011111011100100100001000010100011010000010110110000001111010011010011100001"
-        Console.WriteLine($"Encod:{vbTab}{ToBinString(encMessage)}")
-        Console.WriteLine($"Check:{vbTab}{checkStr}")
-
-        Dim resCheck As Boolean = String.Equals(ToBinString(encMessage), checkStr)
-        If resCheck Then
-            Console.ForegroundColor = ConsoleColor.Green
-        Else
-            Console.ForegroundColor = ConsoleColor.Red
-        End If
-        Console.WriteLine($"Match: {resCheck}")
-        Console.ForegroundColor = ConsoleColor.Gray
         Console.ReadLine()
     End Sub
 
