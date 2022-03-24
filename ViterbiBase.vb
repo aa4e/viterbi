@@ -439,7 +439,6 @@
         ''' <summary>
         ''' Преобразует битовую последовательность в строку ASCII.
         ''' </summary>
-        ''' <param name="bits"></param>
         <Runtime.CompilerServices.Extension()>
         Public Function ToUtf8String(bits As IEnumerable(Of Boolean)) As String
             Dim bytes As New List(Of Byte)
@@ -457,8 +456,6 @@
         ''' <summary>
         ''' Побитово сравнивает 2 массива.
         ''' </summary>
-        ''' <param name="ar1"></param>
-        ''' <param name="ar2"></param>
         <Runtime.CompilerServices.Extension()>
         Public Function BinaryEquals(ar1 As IEnumerable(Of Boolean), ar2 As IEnumerable(Of Boolean)) As Boolean
             If (ar1.Count <> ar2.Count) Then
@@ -471,36 +468,6 @@
             Next
             Return True
         End Function
-
-        '''' <summary>
-        '''' Обращает заданное число младших битов переданного числа.
-        '''' </summary>
-        '''' <param name="value">Число, которое требуется обратить ("отзеркалить").</param>
-        '''' <param name="bitsToReflect">Сколько младших битов числа обратить, 0..32.</param>
-        '''' <remarks>Например: reflect(0x3E23, 3) == 0x3E26.</remarks>
-        'Public Function Reflect(value As Byte, Optional bitsToReflect As Byte = 8) As Byte
-        '    Dim t As UInteger = value
-        '    Dim reflected As Byte = value
-        '    For i As Integer = 0 To bitsToReflect - 1
-        '        Dim bm As Byte = GetBitMask(CByte(bitsToReflect - 1 - i))
-        '        If ((t And 1) = 1) Then
-        '            reflected = reflected Or bm
-        '        Else
-        '            reflected = reflected And (Not bm)
-        '        End If
-        '        t >>= 1
-        '    Next
-        '    Return reflected
-        'End Function
-
-        '''' <summary>
-        '''' Возвращает наибольший разряд числа.
-        '''' </summary>
-        '''' <param name="number">Число, разрядность которого следует определить, степень двойки.</param>
-        'Private Function GetBitMask(number As Byte) As Byte
-        '    Dim res As Byte = (CByte(1) << number)
-        '    Return res
-        'End Function
 
         ''' <summary>
         ''' Добавляет в битовый поток <paramref name="message"/> заданный процент случайных ошибок.
