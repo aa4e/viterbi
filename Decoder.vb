@@ -1,4 +1,4 @@
-﻿Imports System.Threading.Tasks
+Imports System.Threading.Tasks
 
 Namespace Viterbi
 
@@ -29,16 +29,16 @@ Namespace Viterbi
         ''' <param name="encodedMessage"></param>
         Public Function Decode(encodedMessage As IEnumerable(Of Boolean)) As Boolean()
             If (encodedMessage.Count Mod CoderBitness = 0) Then
-                Dim paths As New PathHolder(StatesCount)
+                Dim holder As New PathHolder(StatesCount)
                 'Посимвольно вычитываем из закодированного потока и декодируем:
                 For symbol As Integer = 0 To encodedMessage.Count - CoderBitness Step CoderBitness
                     Dim encoderOutput(CoderBitness - 1) As Boolean
                     For bit As Integer = 0 To CoderBitness - 1
                         encoderOutput(bit) = encodedMessage(symbol + bit)
                     Next
-                    UpdatePaths(encoderOutput, paths)
+                    UpdatePaths(encoderOutput, holder)
                 Next
-                Dim decodedMessage As Boolean() = ChooseFinalMessage(paths)
+                Dim decodedMessage As Boolean() = holder.ChooseFinalMessage()
                 Return decodedMessage
             End If
             Throw New ArgumentException($"Число бит в сообщении ({encodedMessage.Count}) не согласуется с параметрами декодера ({Me.ToString()}).")
@@ -105,29 +105,11 @@ Namespace Viterbi
 #Region "CLOSED METHODS"
 
         ''' <summary>
-        ''' Восстанавливает сообщение, выбирая его из финальных выживших путей кодера.
-        ''' </summary>
-        ''' <param name="encoderPaths"></param>
-        Private Function ChooseFinalMessage(encoderPaths As PathHolder) As Boolean()
-            Dim paths As IEnumerable(Of DecoderPath) = From p As DecoderPath In encoderPaths.Paths
-                                                       Where (p.SurvivorPath.Count > 0)
-                                                       Select p Order By p.Metrics 'путь с минимальной метрикой окажется вверху списка
-            For Each path In paths
-                Dim decoded(path.Count - 1) As Boolean
-                For i As Integer = 0 To path.Count - 1
-                    decoded(i) = path.SurvivorPath(i).DestinationNodeMsb
-                Next
-                Return decoded 'Если имеется несколько путей с одинаковой минимальной метрикой, выбирается первый, потом выходим из цикла.
-            Next
-            Return {}
-        End Function
-
-        ''' <summary>
         ''' Находит очередные выжившие пути декодера, отбрасывает невыжившие.
         ''' </summary>
         ''' <param name="encoderOut">Очередной символ закодированного сообщения на выходе кодера.</param>
-        ''' <param name="paths">Пути декодера. Обновляемое значение.</param>
-        Private Sub UpdatePaths(encoderOut As IEnumerable(Of Boolean), ByRef paths As PathHolder)
+        ''' <param name="paths">Вычислитель и селектор путей декодера. Обновляемое значение.</param>
+        Private Sub UpdatePaths(encoderOut As Boolean(), ByRef paths As PathHolder)
             Dim currentPaths As Transition() = CalculatePathMetrics(encoderOut, paths)
             Dim survivedPaths As Transition() = SelectSurvivedPaths(currentPaths)
             paths.AddSurvivorPath(survivedPaths)
@@ -138,17 +120,17 @@ Namespace Viterbi
         ''' </summary>
         ''' <param name="encoderOut">Очередной символ закодированного сообщения на выходе кодера.</param>
         ''' <param name="paths">Вычислитель и селектор путей декодера.</param>
-        Private Function CalculatePathMetrics(encoderOut As IEnumerable(Of Boolean), ByRef paths As PathHolder) As Transition()
+        Private Function CalculatePathMetrics(encoderOut As Boolean(), paths As PathHolder) As Transition()
             Dim transitionsWithMetrics(StatesCount - 1) As Transition
             For i As Integer = 0 To StatesCount - 1
-                Dim transCount As Integer = Transitions(i).Count()
-                For j As Integer = 0 To transCount - 1
+                Dim numTransitions As Integer = Transitions(i).Count()
+                For j As Integer = 0 To numTransitions - 1
                     Dim trans As Transition = Transitions(i)(j)
                     Dim branchMetric As Integer = CalculateHammingDistance(trans.CoderOutBits, encoderOut)
                     Dim pathMetric As Integer = paths.GetPathMetricByNode(trans.SourceNode)
                     Dim t As Transition = trans.Clone()
                     t.Metrics = branchMetric + pathMetric
-                    transitionsWithMetrics(i * transCount + j) = t
+                    transitionsWithMetrics(i * numTransitions + j) = t
                 Next
             Next
             Return transitionsWithMetrics
@@ -162,14 +144,14 @@ Namespace Viterbi
         ''' Также здесь можно просмотреть невыживший путь, если это для чего-то нужно.
         ''' </remarks>
         Private Function SelectSurvivedPaths(currentPaths As Transition()) As Transition()
+            Dim lu As ILookup(Of Integer, Transition) = currentPaths.ToLookup(Of Integer, Transition)(
+                Function(trans) trans.DestinationNode,
+                Function(trans) trans
+                )
             Dim survivors(TransitionsCount - 1) As Transition
             For i As Integer = 0 To TransitionsCount - 1
-                Dim prevDestNode As Integer = i
-                Dim sameDestPaths As IEnumerable(Of Transition) = From t As Transition In currentPaths
-                                                                  Where (t.DestinationNode = prevDestNode) Select t 'пути с одним узлом назначения
-                'TODO Подумать, как оптимизировать этот цикл в цикле.
-                Dim minMetricTransition As Transition = sameDestPaths.First() 'примем за минимальную метрику произвольный путь (например, 1-ый)
-                For Each t As Transition In sameDestPaths
+                Dim minMetricTransition As Transition = lu(i)(0)
+                For Each t As Transition In lu(i)
                     If (t.Metrics < minMetricTransition.Metrics) Then
                         minMetricTransition = t
                     End If
@@ -185,16 +167,16 @@ Namespace Viterbi
         ''' <param name="bitCombination">Набор битовых комбинаций. Например, {0,1} и {1,1}. Разрядности комбинаций должны быть одинаковыми.</param>
         ''' <remarks>
         ''' Хэмингово расстояние рассчитывается следующим образом: 
-        ''' принятая комбинация складывается по модулю два (ПОРАЗРЯДНО!) со сгенерированной комбинацией и далее рассчитывается количество единиц в получившемся значении. 
+        ''' битовые комбинации складывюется (ПОРАЗРЯДНО) по модулю два и далее рассчитывается количество единиц в получившемся значении. 
         ''' Например, хэмингово расстояние для двух комбинаций 01 и 00 рассчитывается следующим образом: 
-        ''' количество единиц (0 xor 0; 1 xor 0) = количество единиц (01) = 1.
+        ''' количество единиц (0 xor 0; 1 xor 0) = количество единиц (0;1) = 1.
         ''' </remarks>
         Private Shared Function CalculateHammingDistance(ParamArray bitCombination() As IEnumerable(Of Boolean)) As Integer
             Dim sumOfOnes As Integer = 0
             For bit As Integer = 0 To bitCombination(0).Count - 1 'поразрядно 
                 Dim resultBit As Boolean = False
                 For comb As Integer = 0 To bitCombination.Count - 1 'для всех комбинаций
-                    resultBit = resultBit Xor bitCombination(comb)(bit) 'считаем сумму по модуля 2
+                    resultBit = resultBit Xor bitCombination(comb)(bit) 'считаем сумму по модулю 2
                 Next
                 If resultBit Then 'если 1, то инкрементируем сумму
                     sumOfOnes += 1
@@ -232,32 +214,50 @@ Namespace Viterbi
             Public ReadOnly Property Paths As DecoderPath()
 
             ''' <summary>
-            ''' Путь уже имеет узлы или ещё нет (флаги для выжившией и невыжевшей ветвей).
+            ''' Путь уже имеет узлы или ещё нет (флаги для выжившей и невыжевшей ветвей).
             ''' </summary>
-            Private IsFirstNode As Boolean() = {True, True}
+            Private IsFirstNode As Boolean = True
 
 #End Region '/PROPS
 
 #Region "METHODS"
 
             ''' <summary>
+            ''' Восстанавливает сообщение, выбирая его из финальных выживших путей кодера.
+            ''' </summary>
+            Public Function ChooseFinalMessage() As Boolean()
+                Dim finalPaths As IEnumerable(Of DecoderPath) = From p As DecoderPath In Me.Paths
+                                                                Where (p.Count > 0)
+                                                                Select p Order By p.Metrics 'путь с минимальной метрикой окажется вверху списка
+                For Each path In finalPaths
+                    Dim decoded(path.Count - 1) As Boolean
+                    For i As Integer = 0 To path.Count - 1
+                        decoded(i) = path.SurvivorPath(i).DestinationNodeMsb
+                    Next
+                    Return decoded 'Если имеется несколько путей с одинаковой минимальной метрикой, выбирается первый, потом выходим из цикла.
+                Next
+                Return {}
+            End Function
+
+            ''' <summary>
             ''' Добавляет выживший путь в <see cref="Paths"/>.
             ''' </summary>
-            ''' <param name="survivor">Массив выживших переходов.</param>
-            Public Sub AddSurvivorPath(ByRef survivor As Transition())
-                If IsFirstNode(0) Then
-                    AddSurvivorPathFirstly(survivor)
+            ''' <param name="survivors">Массив выживших переходов.</param>
+            Public Sub AddSurvivorPath(ByRef survivors As Transition())
+                If IsFirstNode Then
+                    AddSurvivorPathFirstly(survivors)
                 Else
                     'Новый путь продолжает предыдущий => его начальный узел должен выходить из конечного узла предыдущего узла.
                     'Запоминаем соотвтествие индексов новых выживших уже существующим путям
                     '(если сразу вставлять элемент пути, коллекция Path изменялась бы, что привело бы к ошибкам):
-                    Dim survivorIndeces(survivor.Length - 1) As Integer
-                    Dim prevPathIndeces As New List(Of Integer)
-                    For i As Integer = 0 To survivor.Length - 1
+                    Dim survivorIndeces(survivors.Length - 1) As Integer
+                    Dim prevPathIndeces(survivors.Length - 1) As Integer
+                    For i As Integer = 0 To survivors.Length - 1
                         survivorIndeces(i) = i
                         For j As Integer = 0 To Paths.Count - 1
-                            If (Paths(j).DestinationNode = survivor(i).SourceNode) Then
-                                prevPathIndeces.Add(j)
+                            If (Paths(j).DestinationNode = survivors(i).SourceNode) Then
+                                prevPathIndeces(i) = j
+                                Exit For 'нет нужды идти дальше
                             End If
                         Next
                     Next
@@ -287,22 +287,26 @@ Namespace Viterbi
                             For Each node In Paths(pathIndex).SurvivorPath 'копируем текущий путь вместо удалённого
                                 Paths(survivorToRemove).AddSurvivorNode(node)
                             Next
-                            Paths(survivorToRemove).AddSurvivorNode(survivor(survIndeces(1)))
+                            Paths(survivorToRemove).AddSurvivorNode(survivors(survIndeces(1)))
                         End If
 
                         '1-ый элемент добавляем как обычно:
                         If (survIndeces.Count >= 1) Then
-                            Paths(pathIndex).AddSurvivorNode(survivor(survIndeces(0)))
+                            Paths(pathIndex).AddSurvivorNode(survivors(survIndeces(0)))
                         End If
                     Next
                 End If
             End Sub
 
+            ''' <summary>
+            ''' Первые узлы добавляем без привязки к предыдущим.
+            ''' </summary>
+            ''' <param name="survivors"></param>
             Private Sub AddSurvivorPathFirstly(ByRef survivors As Transition())
                 For i As Integer = 0 To survivors.Length - 1
-                    Paths(i).AddSurvivorNode(survivors(i)) 'первый узел добавляем без привязки к предыдущим в произвольный путь (пусть i-ый)
+                    Paths(i).AddSurvivorNode(survivors(i))
                 Next
-                IsFirstNode(0) = False
+                IsFirstNode = False
             End Sub
 
             ''' <summary>
@@ -310,9 +314,9 @@ Namespace Viterbi
             ''' </summary>
             ''' <param name="node">Узел назначения, для пути которого нужна метрика.</param>
             Public Function GetPathMetricByNode(node As Integer) As Integer
-                If (Paths(0).SurvivorPath.Count > 0) Then
+                If (Not IsFirstNode) Then 'т.е. в пути уже имеются узлы
                     For Each path As DecoderPath In Paths
-                        Dim count As Integer = path.SurvivorPath.Count
+                        Dim count As Integer = path.SurvivorPath.Count() 'так быстрее, чем (path.DestinationNode = node)
                         If (path.SurvivorPath(count - 1).DestinationNode = node) Then
                             Return path.Metrics
                         End If
@@ -355,6 +359,9 @@ Namespace Viterbi
                 End Get
             End Property
 
+            ''' <summary>
+            ''' Число узлов в выжившем пути.
+            ''' </summary>
             Public ReadOnly Property Count As Integer
                 Get
                     Return SurvivorPath.Count()
