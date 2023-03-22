@@ -1,6 +1,6 @@
 # viterbi
 
-Project realize Viterbi encoder and decoder.
+Project realizes Viterbi `encoder` and `decoder`.
 
 ## Usage
 
