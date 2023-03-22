@@ -61,7 +61,7 @@
         ''' <param name="streamToEncode">Двоичный поток, который будет побайтово прочитан и закодирован по алгоритму Витерби.</param>
         ''' <param name="encodedOutputStream">В этот поток (в текстовом!) виде будет сохранён результат.</param>
         Public Sub Encode(streamToEncode As IO.BinaryReader, encodedOutputStream As IO.StreamWriter)
-            Do While (streamToEncode.PeekChar <> -1)
+            Do While (streamToEncode.BaseStream.Position < streamToEncode.BaseStream.Length)
                 Dim b As Byte = streamToEncode.ReadByte()
                 Dim ba As New BitArray({b})
                 Dim encodedBits As IEnumerable(Of Boolean) = Encode(ba)
